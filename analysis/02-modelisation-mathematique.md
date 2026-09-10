@@ -11,8 +11,45 @@
 
 ---
 
+<a name="glossaire"></a>
+## Glossaire des abréviations
+
+| Abréviation | Signification | Description rapide |
+|---|---|---|
+| **TSS** | Training Stress Score | Charge d'une séance pondérée par durée × intensité² (Coggan/TrainingPeaks). Base de CTL/ATL/TSB. |
+| **rTSS** | running TSS | Variante course à pied du TSS : l'IF est calculé sur l'allure (NGP/allure seuil) plutôt que sur la puissance vélo. Formule identique une fois exprimée en IF. |
+| **CTL** | Chronic Training Load | "Fitness" — EWMA de la charge quotidienne, τ ≈ 42 j. |
+| **ATL** | Acute Training Load | "Fatigue" — EWMA de la charge quotidienne, τ ≈ 7 j. |
+| **TSB** | Training Stress Balance | "Forme du jour" — CTL(t-1) − ATL(t-1). |
+| **IF** | Intensity Factor | Intensité relative de la séance par rapport au seuil (NGP/vitesse_seuil, ou NP/FTP en vélo). |
+| **NGP** | Normalized Graded Pace | Allure normalisée corrigée de la pente — moyenne roulante 30 s de la GAP à la puissance 4 (équivalent running du NP cycliste). |
+| **GAP** | Grade Adjusted Pace | Allure équivalente plat : allure réelle corrigée par le coût métabolique de la pente. |
+| **TRIMP** | Training Impulse | Charge d'entraînement basée sur la FC, pondération exponentielle du %FC de réserve (modèle de Banister). |
+| **DSS** | Downhill Stress Score *(nom de travail)* | Charge spécifique à la descente, comptée à part car elle fatigue un système différent (dégâts musculaires excentriques). |
+| **ACWR** | Acute:Chronic Workload Ratio | Ratio ATL/CTL — indicateur (controversé) de risque de surcharge. Zone confort ≈ 0.8–1.3. |
+| **EWMA** | Exponentially Weighted Moving Average | Moyenne mobile à pondération exponentielle décroissante — mécanisme de lissage utilisé pour CTL/ATL et les stimulus de qualité. |
+| **VO2max** | Volume d'O2 maximal | Consommation maximale d'oxygène (ml/kg/min) — proxy de la puissance aérobie. |
+| **SV2** | 2ᵉ Seuil Ventilatoire | Seuil anaérobie — transition vers le domaine d'effort "sévère" ; sert de référence à `frac_seuil` et `CS`. |
+| **T90** | Temps > 90 % VO2max | Proxy principal du stimulus VO2max pendant une séance (Billat, Buchheit & Laursen). |
+| **W′** (Wprime) | Réserve anaérobie | Capacité de travail disponible au-delà de la vitesse critique (kJ) — modèle CS/W′ de Skiba/Jones. |
+| **CS** | Critical Speed | Vitesse critique — équivalent course du CP cycliste, proche de la vitesse au SV2. |
+| **CP** | Critical Power | Puissance critique — équivalent vélo de la CS. |
+| **RPE** | Rate of Perceived Exertion | Échelle de perception subjective de l'effort. |
+| **GI** | Gastro-Intestinal | Troubles digestifs en course (nausée, vomissement). |
+| **DNF** | Did Not Finish | Abandon en course. |
+| **Tc** | Température corporelle | "Core temperature" — pilote l'hyperthermie et l'arrêt forcé. |
+| **Na** | Sodium | Natrémie — risque d'hyponatrémie si dilution excessive. |
+| **SNC** | Système Nerveux Central | Origine de la fatigue "centrale" (`F_nerv`), distincte de la fatigue métabolique ou musculaire. |
+| **RED-S** | Relative Energy Deficiency in Sport | Syndrome de déficit énergétique relatif — risque lié à un déficit calorique trop agressif. |
+| **ITB** | IlioTibial Band | Bandelette ilio-tibiale — un des tissus modélisés dans le risque de blessure (§6.2). |
+| **D+ / D−** | Dénivelé positif / négatif | Mètres montés / descendus sur un parcours ou un segment. |
+| **UTMB** | Ultra-Trail du Mont-Blanc | Course de référence utilisée pour les ordres de grandeur de calibration (§10). |
+
+---
+
 ## Sommaire
 
+0. [Glossaire des abréviations](#glossaire)
 1. [Pourquoi CTL/ATL seul ne suffit pas](#1)
 2. [Quantifier une séance : charge, coût énergétique, dénivelé](#2)
 3. [Le modèle multi-qualités (le cœur)](#3)
@@ -105,9 +142,34 @@ v_GAP  =  v_réelle · C_run(i) / C_run(0)
 Puis charge de type rTSS (intervals.icu / TrainingPeaks) :
 
 ```
-IF   = NGP / allure_seuil                    (NGP = GAP normalisée, moyenne roulante 30 s à la puissance 4)
+IF   = NGP / vitesse_seuil
 rTSS = (durée_s · IF²) / 3600 · 100
 ```
+
+**NGP (Normalized Graded Pace)** — ce n'est pas la moyenne de `v_GAP`, c'est une
+version lissée et pondérée qui pénalise l'irrégularité (équivalent du Normalized
+Power cycliste, transposé à la vitesse) :
+
+```
+1. fenêtre glissante de 30 s sur v_GAP(t)   ← convolution, pas de découpage par blocs :
+                                               la fenêtre avance point par point (1 s),
+                                               chaque v_GAP_30s(t) est la moyenne des
+                                               30 dernières secondes
+2. v_GAP_30s(t) ⁴                            ← élever chaque valeur lissée à la puissance 4
+3. moyenne sur toute la séance
+4. racine 4ᵉ du résultat                     → NGP
+```
+
+La puissance 4 fait qu'un effort irrégulier (fractionné, relances) donne un NGP
+**supérieur** à la simple moyenne arithmétique de `v_GAP`, même à distance/temps
+égal — l'irrégularité coûte plus cher que la régularité, ce qui est le point de
+la métrique. Sur un effort parfaitement constant, `NGP = v_GAP` (une constante à
+la puissance 4 puis racine 4ᵉ redonne la même constante).
+
+> ⚠️ Cohérence d'unités : `vitesse_seuil` doit être une **vitesse** (km/h ou m/s),
+> pas une allure (min/km). Avec une vraie allure il faut inverser le ratio
+> (`allure_seuil / allure_NGP`), sinon le sens du IF s'inverse (aller plus vite
+> réduirait l'allure donc ferait *baisser* le IF, ce qui est faux).
 
 Alternative FC (utile quand on n'a pas d'allure fiable), TRIMP de Banister :
 
